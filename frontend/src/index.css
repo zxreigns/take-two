@@ -120,7 +120,12 @@ button.sm { padding: 6px 11px; font-size: 13px; }
 @keyframes blink { 50% { opacity: .3; } }
 .in { animation: rise .4s both; }
 @media (max-width: 860px) {
-  main { grid-template-columns: 1fr; overflow: auto; }
+  main { grid-template-columns: minmax(0, 1fr); overflow-x: hidden; overflow-y: auto; }
+  .stagewrap { padding: 12px; min-width: 0; }
+  .controls { flex-wrap: wrap; gap: 8px; } .clock { min-width: 0; }
+  .side { min-width: 0; padding: 14px; } .transcript, .op q { overflow-wrap: anywhere; }
+  .proj { display: none; } header { padding: 0 12px; }
+  .jobs .row { flex-wrap: wrap; }
   .side { border-left: 0; border-top: 1px solid var(--line); }
   .sheet { grid-template-columns: repeat(4, 1fr); }
   .hdr-right .status { display: none; }

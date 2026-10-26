@@ -104,7 +104,8 @@ def _run_export(pid: str, doc: dict) -> None:
         tag = "-".join(sorted(o.id for o in ops)) or "none"
         out = out_dir / f"export_{hashlib.sha1(tag.encode()).hexdigest()[:10]}.mp4"
         if not out.exists():
-            render_cut(shots, ops, out, out_dir / "tmp")
+            m = doc.get("media") or {}
+            render_cut(shots, ops, out, out_dir / "tmp", fps_out=str(m.get("fps", 24000 / 1001)), size=f"{m.get('width', 1280)}:{m.get('height', 720)}")
         _exports[pid] = {"state": "done", "url": f"/media/{pid}/{out.name}", "ops": [o.id for o in ops]}
     except Exception as e:  # surfaced to the editor as-is
         _exports[pid] = {"state": "error", "error": str(e)}
@@ -154,6 +155,8 @@ def _save_upload(up: UploadFile, dest: Path, allowed: set[str], what: str) -> Pa
 
 @app.post("/projects/live")
 def live_project(clip: UploadFile = File(...), voice: UploadFile = File(...), name: str = Form("Live project")):
+    if live.busy():
+        raise HTTPException(409, "Another project is processing right now. Try again in a minute, or open the replay project.")
     doc = store.create(name)
     pdir = config.DATA_DIR / doc["id"]; pdir.mkdir(parents=True, exist_ok=True)
     try:
@@ -165,6 +168,7 @@ def live_project(clip: UploadFile = File(...), voice: UploadFile = File(...), na
     try:
         st = live.start(doc["id"], c, v)
     except RuntimeError:
+        shutil.rmtree(pdir, ignore_errors=True); store.delete(doc["id"])
         raise HTTPException(409, "Another project is processing right now. Try again in a minute, or open the replay project.")
     return {"id": doc["id"], "live": st}
 

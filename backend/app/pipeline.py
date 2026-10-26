@@ -120,13 +120,14 @@ def render_cut(shots: list[CutShot], ops: list[Op], out: Path, tmp: Path, ramp_s
                     frames[i] = title_fx.composite(frames[i], cv2.warpAffine(a0, T[:2], (w, h)), fg[i])
             else:
                 anchors = looks.smooth_anchors(fg) if isinstance(b, Blur) else None
+                blk = looks.mosaic_block(fg) if isinstance(b, Blur) else 12
 
                 def one(i: int) -> None:                  # frames are independent here: OpenCV drops the GIL, so threads scale
                     t = i / fps
                     if not (lo <= t <= hi): return
                     amt = 1.0 if starts_at_cut else looks.ease((t - lo) / ramp_s)
                     if isinstance(b, Blur):
-                        frames[i] = looks.redact_mosaic(frames[i], fg[i], amount=amt, anchor=anchors[i])
+                        frames[i] = looks.redact_mosaic(frames[i], fg[i], amount=amt, anchor=anchors[i], block=blk)
                     elif isinstance(b, Spotlight):
                         frames[i] = looks.make_pop_v2(frames[i], fg[i], amount=amt * min(1.0, b.amount / 0.8))
                 with ThreadPoolExecutor(RENDER_THREADS) as ex:

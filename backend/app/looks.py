@@ -137,6 +137,15 @@ def redact_mosaic(frame: np.ndarray, fg: np.ndarray, amount: float = 1.0, block:
     return np.clip(F * (1 - a) + mos * a, 0, 255).astype(np.uint8)
 
 
+def mosaic_block(fgs: list[np.ndarray], cells: float = 11.0, lo: int = 12, hi: int = 64) -> int:
+    """One block size per op, from the target's median size: about `cells` blocks across the object, so a
+    phone filling the frame is as unreadable as a phone across the street (fixed 12 px left a close-up legible)."""
+    sizes = [np.sqrt(float(f.sum())) for f in fgs if f.any()]
+    if not sizes:
+        return lo
+    return int(np.clip(round(float(np.median(sizes)) / cells), lo, hi))
+
+
 def smooth_anchors(fgs: list[np.ndarray], radius: int = 4) -> list[tuple[float, float] | None]:
     """Object centres per frame, box-smoothed over +-radius frames (grid lock for redact_mosaic)."""
     c = []

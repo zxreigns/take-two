@@ -426,6 +426,10 @@ def _render(st: dict, pdir: Path, ops: list[Op], shots: list[dict], sam: dict) -
 
 # ---------- orchestration ----------
 
+def busy() -> bool:
+    return _lock.locked()
+
+
 def start(pid: str, clip: Path, voice: Path) -> dict:
     if not _lock.acquire(blocking=False):
         raise RuntimeError("busy")
