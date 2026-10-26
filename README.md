@@ -22,11 +22,11 @@ editor: before/after diff → approve / reject → MP4 + FCP7 XML
 Everything in this repository was written during the event window. The first commit is dated Oct 26, 2026.
 <!-- keep this list current: it is what judges use to see what is new -->
 - [x] Repo scaffold: FastAPI backend, React + Vite + TypeScript frontend
-- [ ] Ingest: 720p proxy, keyframes, 16 kHz WAV
+- [x] Ingest: 720p proxy, keyframes, 16 kHz WAV
 - [ ] Voice-note notes (Muse Voice Transcribe)
 - [ ] Planner (Muse Wonder tool calling → op JSON)
-- [ ] SAM 3.1 tracking + matte hygiene
-- [ ] Ops: tracked blur · title-behind-subject · spotlight grade
+- [~] SAM 3.1 stream parsing + fast mask decode (Meta parser under Node) + matte hygiene; live request shape pinned on first API call
+- [x] Ops: tracked blur · title-behind-subject · spotlight grade (compositor, tested on synthetic SAM output)
 - [ ] Diff player + approve/reject
 - [ ] Export: MP4 + FCP7 XML
 
