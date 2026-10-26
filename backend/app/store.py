@@ -38,3 +38,9 @@ def all_projects() -> list[dict]:
     with _conn() as c:
         rows = c.execute("select doc from projects order by created desc").fetchall()
     return [json.loads(r[0]) for r in rows]
+
+
+def upsert(doc: dict) -> None:
+    """Insert or replace a document with a fixed id (the replay project)."""
+    with _conn() as c:
+        c.execute("insert or replace into projects values (?,?,?)", (doc["id"], time.time(), json.dumps(doc)))

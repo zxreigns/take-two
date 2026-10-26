@@ -4,6 +4,9 @@ from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+import hashlib
+import threading
+from pathlib import Path
 from . import config, ingest, meta_client, store
 from .ops import Note, Op, OpStatus
 
@@ -83,3 +86,39 @@ def decide(pid: str, oid: str, body: OpDecision):
             store.put(doc)
             return Op(**o)
     raise HTTPException(404, "no such op")
+
+
+# --- export: render only the approved ops (SAM mattes are cached per clip + concept, so no re-segmenting) ---
+_exports: dict[str, dict] = {}
+
+
+def _run_export(pid: str, doc: dict) -> None:
+    from .pipeline import CutShot, render_cut
+    try:
+        shots = [CutShot(Path(s["src"]), s["t_in"], s["t_out"], {k: Path(v) for k, v in s["sam"].items()}) for s in doc["shots"]]
+        ops = [Op(**o) for o in doc["ops"] if o["status"] == "approved"]
+        out_dir = config.DATA_DIR / pid; out_dir.mkdir(parents=True, exist_ok=True)
+        tag = "-".join(sorted(o.id for o in ops)) or "none"
+        out = out_dir / f"export_{hashlib.sha1(tag.encode()).hexdigest()[:10]}.mp4"
+        if not out.exists():
+            render_cut(shots, ops, out, out_dir / "tmp")
+        _exports[pid] = {"state": "done", "url": f"/media/{pid}/{out.name}", "ops": [o.id for o in ops]}
+    except Exception as e:  # surfaced to the editor as-is
+        _exports[pid] = {"state": "error", "error": str(e)}
+
+
+@app.post("/projects/{pid}/export")
+def export(pid: str):
+    doc = get_project(pid)
+    if not doc.get("shots"):
+        raise HTTPException(400, "project has no shot list yet")
+    if _exports.get(pid, {}).get("state") == "running":
+        return _exports[pid]
+    _exports[pid] = {"state": "running"}
+    threading.Thread(target=_run_export, args=(pid, doc), daemon=True).start()
+    return _exports[pid]
+
+
+@app.get("/projects/{pid}/export")
+def export_status(pid: str):
+    return _exports.get(pid, {"state": "idle"})

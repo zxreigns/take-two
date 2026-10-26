@@ -23,12 +23,13 @@ Everything in this repository was written during the event window. The first com
 <!-- keep this list current: it is what judges use to see what is new -->
 - [x] Repo scaffold: FastAPI backend, React + Vite + TypeScript frontend
 - [x] Ingest: 720p proxy, keyframes, 16 kHz WAV
-- [ ] Voice-note notes (Muse Voice Transcribe)
-- [ ] Planner (Muse Wonder tool calling → op JSON)
-- [~] SAM 3.1 stream parsing + fast mask decode (Meta parser under Node) + matte hygiene; live request shape pinned on first API call
-- [x] Ops: tracked blur · title-behind-subject · spotlight grade (compositor, tested on synthetic SAM output)
-- [ ] Diff player + approve/reject
-- [ ] Export: MP4 + FCP7 XML
+- [x] Voice-note notes: timestamped transcript (local Whisper today; Muse Voice Transcribe slots in through `meta_client`)
+- [x] Planner on Meta open weights (Muse Spark Open, tool calling → timecoded op JSON, grounded on keyframes)
+- [x] SAM 3.1 video masks (open weights) with stable object ids; RLE loader + matte refine
+- [x] Ops on real mattes: frosted privacy mosaic (fingers stay sharp) · title behind the subject (world-locked) · make-him-pop grade (subject +0.85 stop, background −1.1 stop, rim + light wrap)
+- [x] Editor: split-wipe diff player, colour-coded mask overlay, approve/reject per edit, timeline of edit spans
+- [x] Export: MP4 of the approved edits only (SAM mattes cached, no re-segmenting)
+- [ ] FCP7 XML export
 
 ## Run locally
 ```bash
@@ -40,6 +41,12 @@ uvicorn app.main:app --reload --port 8000
 
 # frontend
 cd frontend && npm install && npm run dev
+```
+
+Replay project (no model calls; the cut, the plan, the transcript and the mattes are prebuilt):
+```bash
+cd backend && python -m app.demo --dev <dir with sam31_*.json, planner_ops.json, cut_before.mp4> --stock <dir with the Mixkit 720p clips>
+# then open the editor: http://localhost:5173/?project=demo
 ```
 
 ## Media credits
