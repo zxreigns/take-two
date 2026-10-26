@@ -42,5 +42,12 @@ uvicorn app.main:app --reload --port 8000
 cd frontend && npm install && npm run dev
 ```
 
+## Media credits
+Demo footage is free stock from Mixkit, used under the Mixkit Stock Video Free License:
+- "Young man on the street typing on his cell phone" (mixkit.co #4837)
+- "Man walking among traffic in the city" (mixkit.co #101)
+- "A man being followed walking in a city" (mixkit.co #134)
+The client voice note in the demo is synthetic (text-to-speech); the client is fictional.
+
 ## License
 MIT
