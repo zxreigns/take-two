@@ -36,13 +36,18 @@ def _frames(src: Path, t_in: float, t_out: float) -> tuple[list[np.ndarray], flo
     return fs, fps, a
 
 
-def _masks(json_path: Path, first: int, n: int, w: int, h: int, ids: list[str] | None = None, min_frames: int = 8) -> list[np.ndarray]:
+def _masks(json_path: Path, first: int, n: int, w: int, h: int, ids: list[str] | None = None, min_frames: int = 8,
+           primary: bool = False) -> list[np.ndarray]:
     tracks = sam_fal.load(json_path, w, h)
     if ids is None:                                   # every object SAM found for the concept, minus blips
-        seen: dict[str, int] = {}
-        for f in tracks.values():
-            for oid in f: seen[oid] = seen.get(oid, 0) + 1
+        seen: dict[str, int] = {}; area: dict[str, int] = {}
+        for fi, f in tracks.items():
+            if not (first <= fi < first + n): continue
+            for oid, tr in f.items():
+                seen[oid] = seen.get(oid, 0) + 1; area[oid] = area.get(oid, 0) + int(tr.raster.sum())
         ids = sorted(o for o, c in seen.items() if c >= min_frames)
+        if primary and ids:                           # spotlight: "him" = the dominant object in this shot, not every man
+            ids = [max(ids, key=lambda o: area[o])]
     merged = sam_fal.merge(tracks, ids, w, h)
     out = []
     for i in range(first, first + n):
@@ -89,7 +94,7 @@ def render_cut(shots: list[CutShot], ops: list[Op], out: Path, tmp: Path, ramp_s
             if concept not in shot.sam:
                 raise KeyError(f"no SAM result for '{concept}' on {shot.src.name}")
             ids = [str(op.body.target.object_id)] if op.body.target.object_id is not None else None
-            fg = _masks(shot.sam[concept], first, len(frames), w, h, ids)
+            fg = _masks(shot.sam[concept], first, len(frames), w, h, ids, primary=isinstance(op.body, Spotlight))
             lo, hi = max(op.t0, cut_t) - cut_t, min(op.t1, cut_t + dur) - cut_t      # shot-local seconds
             starts_at_cut = op.t0 <= cut_t + 1e-3
             b = op.body
@@ -106,14 +111,15 @@ def render_cut(shots: list[CutShot], ops: list[Op], out: Path, tmp: Path, ramp_s
                     T = M[i] @ np.linalg.inv(M[ref])
                     frames[i] = title_fx.composite(frames[i], cv2.warpAffine(a0, T[:2], (w, h)), fg[i])
             else:
+                anchors = looks.smooth_anchors(fg) if isinstance(b, Blur) else None
                 for i in range(len(frames)):
                     t = i / fps
                     if not (lo <= t <= hi): continue
                     amt = 1.0 if starts_at_cut else looks.ease((t - lo) / ramp_s)
                     if isinstance(b, Blur):
-                        frames[i] = looks.redact_blur(frames[i], fg[i], amount=amt)
+                        frames[i] = looks.redact_mosaic(frames[i], fg[i], amount=amt, anchor=anchors[i])
                     elif isinstance(b, Spotlight):
-                        frames[i] = looks.make_pop(frames[i], fg[i], amount=amt * min(1.0, b.amount / 0.8))
+                        frames[i] = looks.make_pop_v2(frames[i], fg[i], amount=amt * min(1.0, b.amount / 0.8))
         p = tmp / f"shot{si + 1}.mp4"; _encode(frames, fps, p); parts.append(p)
         cut_t += dur
     return concat(parts, out)
