@@ -15,10 +15,25 @@ the cut + the client's voice note (uploaded in the editor)
    └─ Muse Spark Open (Meta open weights; planner, tool calls) ──► timecoded edit ops, each quoting the client
         ├─ SAM 3.1 (Meta open weights; video, noun-phrase concept) per shot × target ──► per-frame masks, stable ids
         └─ render: matte hygiene → privacy mosaic · title behind the subject · make-him-pop grade
-editor: live progress (masks paint in as they decode) → before/after diff → approve / reject → MP4
+editor: live progress (masks paint in as they decode) → before/after diff → approve / reject → MP4 + FCP7 XML
 ```
 Every stage streams to the editor over server-sent events and caches its output, so a failed run resumes
 at the stage that broke ("Retry from here"). The replay project needs no model calls at all.
+
+## Architecture
+| Layer | What it does | Where |
+|---|---|---|
+| Ingest | 720p proxy, shot detection, frame-exact shot segments, timecoded keyframes, 16 kHz WAV | `backend/app/ingest.py` |
+| Transcript | local Whisper (faster-whisper "small"), timestamped lines | `backend/app/live.py` |
+| Planner | Muse Spark Open (Meta open weights) with tool calling: transcript + keyframes → timecoded ops (`blur`, `title_behind`, `spotlight`, `ask`), each tied to the client's words | `backend/app/planner.py` |
+| Masks | SAM 3.1 (Meta open weights) video segmentation per shot × target, run in parallel; RLE decode to per-frame mattes with stable object ids | `backend/app/sam_fal.py`, `backend/samdecode/` |
+| Looks | matte hygiene (guided filter), frosted privacy mosaic that keeps fingers sharp, world-locked title behind the subject with contact shadow and light wrap, make-him-pop grade with rim light | `backend/app/looks.py`, `backend/app/title_fx.py` |
+| Render | per-shot frame render → joined cut; export renders only approved ops from cached mattes | `backend/app/pipeline.py` |
+| Live run | staged job with server-sent events, per-stage cache, resume-on-retry, survives an API restart | `backend/app/live.py`, `backend/app/main.py` |
+| NLE export | FCP7 XML (xmeml v4): V1 client cut, V2 Take Two edits, markers with the client's words | `backend/app/fcpxml.py` |
+| Editor | React + Vite + TypeScript: progress view, split-wipe diff player, mask overlay, approve/reject cards, timeline, export | `frontend/src/` |
+
+The models are reached through OpenAI-compatible (planner) and queue (SAM) HTTP APIs configured in `backend/.env`, so the same code runs against any host serving the open weights.
 
 ## Built during the hackathon (Oct 26 – Nov 4, 2026)
 Everything in this repository was written during the event window. The first commit is dated Oct 26, 2026.
@@ -32,7 +47,7 @@ Everything in this repository was written during the event window. The first com
 - [x] Editor: split-wipe diff player, colour-coded mask overlay, approve/reject per edit, timeline of edit spans
 - [x] Export: MP4 of the approved edits only (SAM mattes cached, no re-segmenting)
 - [x] Live route: upload a cut + a voice note in the editor → transcript → plan → SAM 3.1 masks → render, with a live progress view (stages, transcript and edit cards streaming in, masks painting in per shot), clean errors and resume-on-retry
-- [ ] FCP7 XML export
+- [x] FCP7 XML export: V1 the client cut, V2 the approved edits cut to their spans, sequence markers carrying the client's words (`GET /projects/{id}/export.xml`)
 
 ## Run locally
 ```bash
@@ -59,7 +74,10 @@ Demo footage is free stock from Mixkit, used under the Mixkit Stock Video Free L
 - "Man texting on WhatsApp" (mixkit.co #41173), a 4 s section cropped to 16:9 for shot 1
 - "Man walking among traffic in the city" (mixkit.co #101)
 - "A man being followed walking in a city" (mixkit.co #134)
-The client voice notes in the demo are synthetic (text-to-speech); the clients are fictional.
+
+Demo video music: "Lo-Fi 04" by Lily J (Mixkit), used under the Mixkit Stock Music Free License (royalty-free).
+
+The client voice notes and the demo video's narration are synthetic (text-to-speech); the clients are fictional.
 
 ## License
 MIT

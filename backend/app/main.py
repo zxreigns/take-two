@@ -128,6 +128,35 @@ def export_status(pid: str):
     return _exports.get(pid, {"state": "idle"})
 
 
+@app.get("/projects/{pid}/export.xml")
+def export_xml(pid: str):
+    """FCP7 XML for the last export: V1 the client cut, V2 the approved edits, markers with the client's words."""
+    from fastapi.responses import Response
+    from . import fcpxml
+    st = _exports.get(pid, {})
+    if st.get("state") != "done":
+        raise HTTPException(409, "export the approved edits first")
+    doc = get_project(pid)
+    m = doc.get("media") or {}
+    before = Path(m.get("before_url", "")).name
+    after = Path(st["url"]).name
+    has_audio = False
+    try:
+        import subprocess
+        p = config.DATA_DIR / pid / before
+        out = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "a", "-show_entries", "stream=index", "-of", "csv=p=0", str(p)],
+                             capture_output=True, text=True, timeout=20).stdout.strip()
+        has_audio = bool(out)
+    except Exception:
+        pass
+    ops = [o for o in doc["ops"] if o["id"] in set(st.get("ops", []))]
+    notes = {n["id"]: n["text"] for n in doc.get("notes", [])}
+    xml = fcpxml.build(doc.get("name", "Take Two revision"), before, after, float(m.get("duration", 0)),
+                       float(m.get("fps", 24000 / 1001)), int(m.get("width", 1280)), int(m.get("height", 720)), ops, notes, has_audio)
+    return Response(xml, media_type="application/xml",
+                    headers={"Content-Disposition": f'attachment; filename="take_two_{pid}.xml"'})
+
+
 # --- live route: clip + voice note in -> transcript -> plan -> SAM masks -> render, streamed to the editor ---
 from . import live  # noqa: E402
 

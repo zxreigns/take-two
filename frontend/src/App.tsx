@@ -235,6 +235,7 @@ export default function App() {
               {exp.state === "running" ? "Rendering approved edits…" : `Export ${approved} approved`}
             </button>
             {exp.state === "done" && exp.url && <a className="dl" href={media(exp.url)} download>Download MP4</a>}
+            {exp.state === "done" && exp.url && project && <a className="dl" href={media(`/projects/${project.id}/export.xml`)} download>FCP7 XML (V1 cut · V2 edits)</a>}
             {exp.state === "error" && <p className="err">{exp.error}</p>}
           </div>
         </aside>
