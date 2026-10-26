@@ -26,7 +26,7 @@ def matte_track(shots: list[CutShot], ops: list[Op], out: Path, fps: float = 240
         w, h = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)), int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)); cap.release()
         a, b = int(round(shot.t_in * sfps)), int(round(shot.t_out * sfps))
         dur = (b - a) / sfps
-        live = [o for o in ops if o.t1 > cut_t and o.t0 < cut_t + dur and o.body.kind != "ask"]
+        live = [o for o in ops if o.t1 > cut_t + 1e-3 and o.t0 < cut_t + dur - 1e-3 and o.body.kind != "ask"]
         tracks = []
         for o in live:
             ids = [str(o.body.target.object_id)] if o.body.target.object_id is not None else None
@@ -94,9 +94,46 @@ def build(dev: Path, stock: Path, after_name: str = "cut_after_v3_planned.mp4") 
     return doc
 
 
+def from_live(pid: str, name: str = "Client cut · revision 5") -> dict:
+    """Freeze a finished live project as the replay project: same media, plan, transcript, mattes and the
+    recorded progress run, copied under DATA_DIR/demo so the editor needs no model calls."""
+    src = config.DATA_DIR / pid
+    doc = store.get(pid)
+    if not doc or (doc.get("live") or {}).get("state") != "done":
+        raise SystemExit(f"project {pid} has no finished live run")
+    d = config.DATA_DIR / "demo"
+    shutil.rmtree(d, ignore_errors=True); d.mkdir(parents=True)
+    keep = ["before", "after", "mattes"]
+    for n in keep:
+        for ext in (".mp4", ".webm"):
+            if (src / f"{n}{ext}").exists():
+                shutil.copy(src / f"{n}{ext}", d / f"{n}{ext}")
+    voice = Path(doc["media"]["voice_url"]).name
+    shutil.copy(src / voice, d / voice)
+    for sub in ("paint", "keyframes", "sam"):
+        if (src / sub).exists():
+            shutil.copytree(src / sub, d / sub)
+    for f in src.glob("kf_shot*.jpg"):
+        shutil.copy(f, d / f.name)
+    for f in src.glob("shot*.mp4"):                    # the segments the cached mattes index into (export needs them)
+        shutil.copy(f, d / f.name)
+    blob = json.dumps(doc).replace(f"/media/{pid}/", "/media/demo/").replace(str(src), str(d))
+    new = json.loads(blob)
+    new.update({"id": "demo", "name": name, "replay": True})
+    new["live"]["pid"] = "demo"
+    for o in new["ops"]:
+        o["status"] = "proposed"
+    store.upsert(new)
+    return new
+
+
 if __name__ == "__main__":
-    ap = argparse.ArgumentParser(); ap.add_argument("--dev", type=Path, required=True); ap.add_argument("--stock", type=Path, required=True)
+    ap = argparse.ArgumentParser(); ap.add_argument("--dev", type=Path); ap.add_argument("--stock", type=Path)
     ap.add_argument("--after", default="cut_after_v3_planned.mp4")
+    ap.add_argument("--from-live", help="freeze a finished live project id as the replay project")
     a = ap.parse_args()
+    if a.from_live:
+        doc = from_live(a.from_live)
+        print(json.dumps({k: doc[k] for k in ("id", "name", "media")}, indent=1)); raise SystemExit
     doc = build(a.dev.resolve(), a.stock.resolve(), a.after)
     print(json.dumps({k: doc[k] for k in ("id", "name", "media")}, indent=1))

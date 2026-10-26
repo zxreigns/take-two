@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, fmt, fmtf, KIND, media, type ExportState, type Op, type Project } from "./api";
+import { LiveRun, NewProject } from "./Live";
 
 type View = "split" | "before" | "after";
 
@@ -28,11 +29,40 @@ export default function App() {
   const stage = useRef<HTMLDivElement>(null);
   const dragging = useRef(false);
 
-  useEffect(() => {
-    const id = new URLSearchParams(location.search).get("project") ?? "demo";
-    api.get(id).then((p) => { setProject(p); setStatus(p.replay ? "replay project · no model calls" : "live project"); })
-      .catch(() => setStatus("API offline"));
+  const [pid, setPid] = useState(() => new URLSearchParams(location.search).get("project") ?? "demo");
+  const [showNew, setShowNew] = useState(false);
+  const [running, setRunning] = useState(false);
+
+  const open = useCallback((id: string) => {
+    if (id !== new URLSearchParams(location.search).get("project")) history.pushState(null, "", id === "demo" ? location.pathname : `?project=${id}`);
+    setPid(id); setExp({ state: "idle" }); setSelected(null); setPlaying(false);
   }, []);
+
+  useEffect(() => {
+    let gone = false;
+    api.get(pid).then((p) => {
+      if (gone) return;
+      setProject(p);
+      const live = p.live && p.live.state !== "done";
+      setRunning(!!live);
+      setStatus(p.replay ? "replay project · no model calls" : live ? "live project · processing" : `live project · planned by ${p.planner?.model ?? "the planner"}`);
+    }).catch(() => {
+      if (gone) return;
+      if (pid !== "demo") { setStatus("that project is gone · showing the replay project"); open("demo"); }
+      else setStatus("API offline");
+    });
+    return () => { gone = true; };
+  }, [pid, open]);
+
+  useEffect(() => {
+    const onPop = () => setPid(new URLSearchParams(location.search).get("project") ?? "demo");
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+
+  const finished = useCallback(() => {
+    api.get(pid).then((p) => { setProject(p); setRunning(false); setStatus(`live project · planned by ${p.planner?.model ?? "the planner"}`); });
+  }, [pid]);
 
   // keep the three videos locked to the "before" clock
   useEffect(() => {
@@ -109,14 +139,22 @@ export default function App() {
     <div className="shell">
       <header>
         <div className="brand"><span className="mark">2</span> Take Two <span className="proj">{project?.name}</span></div>
-        <div className="status">{status}</div>
+        <div className="hdr-right">
+          <span className="status">{status}</span>
+          {pid !== "demo" && <button className="ghost sm" onClick={() => open("demo")}>Replay project</button>}
+          <button className="go sm" onClick={() => setShowNew(true)}>+ New revision</button>
+        </div>
       </header>
+      {showNew && <NewProject onClose={() => setShowNew(false)} onStarted={(id) => { setShowNew(false); setRunning(true); setProject(null); open(id); }} />}
 
+      {running ? (
+        <main><LiveRun key={pid} pid={pid} onDone={finished} onReplay={() => { setRunning(false); open("demo"); }} /></main>
+      ) : (
       <main>
         <section className="stagewrap">
           {m ? (
             <>
-              <div className="stage" ref={stage} onPointerMove={onPointer} onPointerUp={() => (dragging.current = false)} onPointerLeave={() => (dragging.current = false)}>
+              <div className="stage" key={project?.id} ref={stage} onPointerMove={onPointer} onPointerUp={() => (dragging.current = false)} onPointerLeave={() => (dragging.current = false)}>
                 <video ref={before} muted playsInline onEnded={() => setPlaying(false)}>{sources(m.before_url ?? m.proxy_url)}</video>
                 {m.after_url && (
                   <video ref={after} className="after" muted playsInline
@@ -201,8 +239,9 @@ export default function App() {
           </div>
         </aside>
       </main>
+      )}
 
-      <footer className="timeline">
+      <footer className="timeline" style={running ? { visibility: "hidden" } : undefined}>
         <div className="track" onPointerDown={(e) => {
           const r = e.currentTarget.getBoundingClientRect(); seek(((e.clientX - r.left) / r.width) * duration);
         }}>

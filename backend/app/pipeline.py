@@ -5,7 +5,9 @@ timeline (that's what the planner grounds to). SAM runs per source clip and conc
 so re-planning or approving a different subset never re-segments.
 """
 from __future__ import annotations
+import os
 import subprocess
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -14,6 +16,9 @@ import numpy as np
 
 from . import looks, sam_fal, title_fx
 from .ops import Blur, Op, Spotlight, TitleBehind
+
+
+RENDER_THREADS = int(os.getenv("RENDER_THREADS", "4"))
 
 
 @dataclass
@@ -80,14 +85,17 @@ def concat(parts: list[Path], out: Path, fps: str = "24000/1001", size: str = "1
     return out
 
 
-def render_cut(shots: list[CutShot], ops: list[Op], out: Path, tmp: Path, ramp_s: float = 0.4) -> Path:
+def render_cut(shots: list[CutShot], ops: list[Op], out: Path, tmp: Path, ramp_s: float = 0.4,
+               fps_out: str = "24000/1001", size: str = "1280:720", progress=None) -> Path:
+    """progress(fraction, message) is called as shots finish (the live route streams it to the editor)."""
     tmp.mkdir(parents=True, exist_ok=True)
     parts, cut_t = [], 0.0
     for si, shot in enumerate(shots):
+        if progress: progress(si / len(shots), f"shot {si + 1} of {len(shots)}")
         frames, fps, first = _frames(shot.src, shot.t_in, shot.t_out)
         h, w = frames[0].shape[:2]
         dur = len(frames) / fps
-        mine = [o for o in ops if o.t1 > cut_t and o.t0 < cut_t + dur and o.body.kind != "ask"]
+        mine = [o for o in ops if o.t1 > cut_t + 1e-3 and o.t0 < cut_t + dur - 1e-3 and o.body.kind != "ask"]   # a ms of float slop at a cut is not an overlap
         layer = {"spotlight": 0, "blur": 1, "title_behind": 2}
         for op in sorted(mine, key=lambda o: layer[o.body.kind]):
             concept = op.body.target.concept
@@ -112,14 +120,18 @@ def render_cut(shots: list[CutShot], ops: list[Op], out: Path, tmp: Path, ramp_s
                     frames[i] = title_fx.composite(frames[i], cv2.warpAffine(a0, T[:2], (w, h)), fg[i])
             else:
                 anchors = looks.smooth_anchors(fg) if isinstance(b, Blur) else None
-                for i in range(len(frames)):
+
+                def one(i: int) -> None:                  # frames are independent here: OpenCV drops the GIL, so threads scale
                     t = i / fps
-                    if not (lo <= t <= hi): continue
+                    if not (lo <= t <= hi): return
                     amt = 1.0 if starts_at_cut else looks.ease((t - lo) / ramp_s)
                     if isinstance(b, Blur):
                         frames[i] = looks.redact_mosaic(frames[i], fg[i], amount=amt, anchor=anchors[i])
                     elif isinstance(b, Spotlight):
                         frames[i] = looks.make_pop_v2(frames[i], fg[i], amount=amt * min(1.0, b.amount / 0.8))
+                with ThreadPoolExecutor(RENDER_THREADS) as ex:
+                    list(ex.map(one, range(len(frames))))
         p = tmp / f"shot{si + 1}.mp4"; _encode(frames, fps, p); parts.append(p)
         cut_t += dur
-    return concat(parts, out)
+    if progress: progress(1.0, "joining shots")
+    return concat(parts, out, fps=fps_out, size=size)

@@ -44,3 +44,8 @@ def upsert(doc: dict) -> None:
     """Insert or replace a document with a fixed id (the replay project)."""
     with _conn() as c:
         c.execute("insert or replace into projects values (?,?,?)", (doc["id"], time.time(), json.dumps(doc)))
+
+
+def delete(pid: str) -> None:
+    with _conn() as c:
+        c.execute("delete from projects where id=?", (pid,))
