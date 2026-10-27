@@ -31,7 +31,7 @@ at the stage that broke ("Retry from here"). The replay project needs no model c
 | Render | per-shot frame render → joined cut; export renders only approved ops from cached mattes | `backend/app/pipeline.py` |
 | Live run | staged job with server-sent events, per-stage cache, resume-on-retry, survives an API restart | `backend/app/live.py`, `backend/app/main.py` |
 | NLE export | FCP7 XML (xmeml v4): V1 client cut, V2 Take Two edits, markers with the client's words | `backend/app/fcpxml.py` |
-| Editor | React + Vite + TypeScript: progress view, split-wipe diff player, mask overlay, approve/reject cards, timeline, export | `frontend/src/` |
+| Editor | React + Vite + TypeScript: wipe-reveal player (EDITED left, ORIGINAL right, always labelled; auto wipe inside each edit or drag it), the client's voice note with a live transcript tied to the edit each line asked for, approve/reject cards, picture/edits/client timeline, SAM 3.1 mask view, export popover, live progress view | `frontend/src/` |
 
 The models are reached through OpenAI-compatible (planner) and queue (SAM) HTTP APIs configured in `backend/.env`, so the same code runs against any host serving the open weights.
 
@@ -48,6 +48,8 @@ Everything in this repository was written during the event window. The first com
 - [x] Export: MP4 of the approved edits only (SAM mattes cached, no re-segmenting)
 - [x] Live route: upload a cut + a voice note in the editor → transcript → plan → SAM 3.1 masks → render, with a live progress view (stages, transcript and edit cards streaming in, masks painting in per shot), clean errors and resume-on-retry
 - [x] FCP7 XML export: V1 the client cut, V2 the approved edits cut to their spans, sequence markers carrying the client's words (`GET /projects/{id}/export.xml`)
+- [x] Editor redesign ("Daylight"): white tiles on warm grey, Inter Tight + Inter, colour only for meaning (client blue, one hue per kind of edit). Play the client's voice note and the editor follows it: each line lights up the edit it asked for, the player jumps to that shot and wipes the edit in
+- [x] Showcase project: three edits that normally take hours of roto: remove a man walking through a plaza (and his shadow) with SAM 3.1 masks + VOID video inpainting; a flat sky to golden hour on a SAM 3.1 sky matte; a red dress to royal blue with the roses untouched. New op kinds `remove`, `sky`, `recolour`; export joins the approved edited shots
 
 ## Run locally
 ```bash
@@ -63,10 +65,17 @@ cd frontend && npm install && npm run dev
 
 Live route: open the editor, press **+ New revision**, drop the cut (up to 60 s) and the voice note, press **Run Take Two**.
 
+Showcase project (opens by default; built from the rendered shots, their SAM 3.1 answers and the client's voice note):
+```bash
+cd backend && python -m app.wow --wow <folder with removal_v2/ sky/ recolour/ masks/ voice/>
+# http://localhost:5173/   ·   the Lagos replay below opens at /?project=demo
+```
+
 Replay project (no model calls; a finished live run frozen with its media, plan, transcript and mattes):
 ```bash
 cd backend && python -m app.demo --from-live <project id>
-# the editor opens it by default: http://localhost:5173/
+python -m app.wow --thumbs-for demo   # timeline thumbnails
+# http://localhost:5173/?project=demo
 ```
 
 ## Media credits
@@ -74,6 +83,10 @@ Demo footage is free stock from Mixkit, used under the Mixkit Stock Video Free L
 - "Man texting on WhatsApp" (mixkit.co #41173), a 4 s section cropped to 16:9 for shot 1
 - "Man walking among traffic in the city" (mixkit.co #101)
 - "A man being followed walking in a city" (mixkit.co #134)
+
+- Showcase: "Young man walking listening to music from his headphones" (#4855), "Young man walking in a rural path" (#23818), "Sunbeams through the clouds in the sunset" (#7444, sky plate), "Blonde girl in a red dress" (#47773)
+
+Showcase removal uses VOID (video object and interaction deletion, open weights, served on fal) for the inpainting.
 
 Demo video music: "Lo-Fi 04" by Lily J (Mixkit), used under the Mixkit Stock Music Free License (royalty-free).
 

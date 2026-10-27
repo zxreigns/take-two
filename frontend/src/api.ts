@@ -1,20 +1,21 @@
 export const API = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 
-export type Note = { id: string; t: number | null; text: string; source: "typed" | "voice" };
-export type OpKind = "blur" | "title_behind" | "spotlight" | "ask";
+export type Note = { id: string; t: number | null; text: string; source: "typed" | "voice"; said?: [number, number] };
+export type OpKind = "blur" | "title_behind" | "spotlight" | "ask" | "remove" | "sky" | "recolour";
 export type Op = {
   id: string; note_id: string; t0: number; t1: number;
   body: { kind: OpKind; target?: { concept: string; object_id: number | null }; text?: string; [k: string]: unknown };
-  status: "proposed" | "approved" | "rejected"; rationale: string;
+  status: "proposed" | "approved" | "rejected"; rationale: string; frames?: number;
 };
 export type Line = { t0: number; t1: number; text: string };
 export type Media = {
   proxy_url: string; duration: number; fps: number; width: number; height: number;
   before_url?: string; after_url?: string; mattes_url?: string; voice_url?: string | null;
+  thumbs?: { before?: string[]; after?: string[] };
 };
 export type Project = {
   id: string; name: string; notes: Note[]; ops: Op[]; media: null | Media;
-  transcript?: Line[] | null; planner?: { model?: string; seconds?: number }; replay?: boolean;
+  transcript?: Line[] | null; planner?: { model?: string; seconds?: number; baked?: boolean }; replay?: boolean; client?: string;
   live?: LiveState | null;
 };
 export type ExportState = { state: "idle" | "running" | "done" | "error"; url?: string; error?: string; ops?: string[] };
@@ -30,6 +31,7 @@ export const api = {
   health: () => j<{ ok: boolean; model_key: boolean; planner: string }>("/health"),
   create: (name: string) => j<Project>("/projects", json({ name })),
   get: (id: string) => j<Project>(`/projects/${id}`),
+  list: () => j<Project[]>("/projects"),
   upload: (id: string, file: File) => {
     const fd = new FormData(); fd.append("file", file);
     return j<Project>(`/projects/${id}/media`, { method: "POST", body: fd });
@@ -54,12 +56,32 @@ export function parseNoteLine(line: string): { t: number | null; text: string } 
 export const fmt = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 export const fmtf = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toFixed(1).padStart(4, "0")}`;
 
-export const KIND: Record<OpKind, { label: string; colour: string }> = {
-  blur: { label: "Blur", colour: "#ff4db4" },
-  title_behind: { label: "Title behind", colour: "#ffb000" },
-  spotlight: { label: "Make pop", colour: "#c6ff3d" },
-  ask: { label: "Question", colour: "#8a8a96" },
+/** Colour carries meaning and nothing else: the client is blue, each kind of edit has its own hue. */
+export const CLIENT = "#2F6BFF";
+export const KIND: Record<OpKind, { label: string; colour: string; done: string }> = {
+  remove: { label: "Remove", colour: "#7C3AED", done: "Removed" },
+  sky: { label: "Sky", colour: "#F59E0B", done: "Sky replaced" },
+  recolour: { label: "Recolour", colour: "#E5487A", done: "Recoloured" },
+  blur: { label: "Blur", colour: "#0EA5A4", done: "Blurred" },
+  title_behind: { label: "Title behind", colour: "#FF6A1A", done: "Title added" },
+  spotlight: { label: "Make pop", colour: "#12B76A", done: "Popped" },
+  ask: { label: "Question", colour: "#8A8A83", done: "Asked" },
 };
+
+/** The edit in a few words, the way an editor would write it on a card. */
+export function opTitle(o: Op): string {
+  const b = o.body; const c = b.target?.concept ?? "";
+  switch (b.kind) {
+    case "remove": return `Remove the ${c}`;
+    case "sky": return `Sky to ${String(b.look ?? "golden hour")}`;
+    case "recolour": return `${cap(c)} to ${String(b.colour ?? "")}`;
+    case "blur": return `Blur the ${c}`;
+    case "title_behind": return `“${b.text}” behind the ${c}`;
+    case "spotlight": return `Make the ${c} pop`;
+    default: return String(b.question ?? "Question");
+  }
+}
+const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 // ---------- live route ----------
 export type Stage = { key: string; label: string; status: "pending" | "running" | "done" | "error" | "skipped"; t0: number | null; t1: number | null; msg: string };

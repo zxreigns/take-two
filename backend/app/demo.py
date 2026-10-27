@@ -14,7 +14,7 @@ from . import config, store
 from .ops import Op, Spotlight
 from .pipeline import CutShot, _masks
 
-COLOURS = {"blur": (180, 77, 255), "title_behind": (0, 176, 255), "spotlight": (61, 255, 198)}  # BGR
+COLOURS = {"blur": (164, 165, 14), "title_behind": (26, 106, 255), "spotlight": (106, 183, 18)}  # BGR
 
 
 def matte_track(shots: list[CutShot], ops: list[Op], out: Path, fps: float = 24000 / 1001, size=(640, 360)) -> Path:
@@ -94,7 +94,7 @@ def build(dev: Path, stock: Path, after_name: str = "cut_after_v3_planned.mp4") 
     return doc
 
 
-def from_live(pid: str, name: str = "Client cut · revision 5") -> dict:
+def from_live(pid: str, name: str = "Lagos walk · revision 5", client: str = "Tolu") -> dict:
     """Freeze a finished live project as the replay project: same media, plan, transcript, mattes and the
     recorded progress run, copied under DATA_DIR/demo so the editor needs no model calls."""
     src = config.DATA_DIR / pid
@@ -119,7 +119,7 @@ def from_live(pid: str, name: str = "Client cut · revision 5") -> dict:
         shutil.copy(f, d / f.name)
     blob = json.dumps(doc).replace(f"/media/{pid}/", "/media/demo/").replace(str(src), str(d))
     new = json.loads(blob)
-    new.update({"id": "demo", "name": name, "replay": True})
+    new.update({"id": "demo", "name": name, "replay": True, "client": client})
     new["live"]["pid"] = "demo"
     for o in new["ops"]:
         o["status"] = "proposed"

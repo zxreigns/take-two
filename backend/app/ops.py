@@ -54,7 +54,27 @@ class Ask(BaseModel):
     options: list[str] = []
 
 
-OpBody = Union[Blur, TitleBehind, Spotlight, Ask]
+class Remove(BaseModel):
+    kind: Literal["remove"] = "remove"
+    target: Target                    # removed from every frame; the background is rebuilt (video inpainting)
+    also: Optional[str] = None        # e.g. "his shadow": interaction regions removed with it
+    engine: Optional[str] = None
+
+
+class SkyReplace(BaseModel):
+    kind: Literal["sky"] = "sky"
+    target: Target = Target(concept="sky")
+    look: str = "golden hour"
+
+
+class Recolour(BaseModel):
+    kind: Literal["recolour"] = "recolour"
+    target: Target
+    colour: str                       # spoken colour, e.g. "royal blue"
+    hex: Optional[str] = None
+
+
+OpBody = Union[Blur, TitleBehind, Spotlight, Ask, Remove, SkyReplace, Recolour]
 
 
 class OpStatus(str, Enum):

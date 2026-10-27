@@ -36,7 +36,7 @@ STAGES = [
     ("masks", "Tracking the targets"),
     ("render", "Rendering take two"),
 ]
-OP_COLOURS = {"blur": (180, 77, 255), "title_behind": (0, 176, 255), "spotlight": (61, 255, 198)}  # BGR, as demo.py
+OP_COLOURS = {"blur": (164, 165, 14), "title_behind": (26, 106, 255), "spotlight": (106, 183, 18)}  # BGR, as demo.py
 
 _runs: dict[str, dict] = {}          # pid -> live state (the SSE stream reads this)
 _lock = threading.Lock()             # one live run at a time on this box

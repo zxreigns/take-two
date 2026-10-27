@@ -95,9 +95,28 @@ def decide(pid: str, oid: str, body: OpDecision):
 _exports: dict[str, dict] = {}
 
 
+def _run_baked_export(pid: str, doc: dict) -> None:
+    """Projects whose edits were rendered ahead (the showcase): per shot, the edited segment if its edit is
+    approved, else the original segment, joined without re-encoding."""
+    approved = {o["id"] for o in doc["ops"] if o["status"] == "approved"}
+    out_dir = config.DATA_DIR / pid
+    tag = "-".join(sorted(approved)) or "none"
+    out = out_dir / f"export_{hashlib.sha1(tag.encode()).hexdigest()[:10]}.mp4"
+    if not out.exists():
+        parts = [s["baked"]["after"] if s["baked"]["op"] in approved else s["baked"]["before"] for s in doc["shots"]]
+        lst = out_dir / "export_list.txt"
+        lst.write_text("".join(f"file '{p}'\n" for p in parts))
+        import subprocess
+        subprocess.run(["timeout", "-k", "5", "120", "ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-f", "concat", "-safe", "0",
+                        "-i", str(lst), "-c", "copy", "-movflags", "+faststart", str(out)], check=True)
+    _exports[pid] = {"state": "done", "url": f"/media/{pid}/{out.name}", "ops": sorted(approved)}
+
+
 def _run_export(pid: str, doc: dict) -> None:
     from .pipeline import CutShot, render_cut
     try:
+        if doc["shots"] and all(s.get("baked") for s in doc["shots"]):
+            return _run_baked_export(pid, doc)
         shots = [CutShot(Path(s["src"]), s["t_in"], s["t_out"], {k: Path(v) for k, v in s["sam"].items()}) for s in doc["shots"]]
         ops = [Op(**o) for o in doc["ops"] if o["status"] == "approved"]
         out_dir = config.DATA_DIR / pid; out_dir.mkdir(parents=True, exist_ok=True)
