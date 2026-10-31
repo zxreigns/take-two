@@ -7,6 +7,8 @@ Take Two listens, finds each moment, tracks the right object frame by frame, and
 
 Built for the Meta Global AI Developer Hackathon (Indie track · Build for Your World).
 
+**Launch film (90 s):** [watch it on X](https://x.com/musepriest/status/2116530783657628015)
+
 ![Take Two: the client's voice note becomes a plan from Muse Spark](docs/img/signal_1_voice_to_plan.jpg)
 
 | The edit, wiped against the original | SAM 3.1 tracking each target, live | At 360 px on a phone |
