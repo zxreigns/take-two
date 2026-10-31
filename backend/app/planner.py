@@ -20,14 +20,15 @@ from pathlib import Path
 import cv2
 import httpx
 
-from .ops import Ask, Blur, Note, NoteSource, Op, Spotlight, Target, TitleBehind
+from .ops import Ask, Blur, Note, NoteSource, Op, Recolour, Remove, SkyReplace, Spotlight, Target, TitleBehind
 
 SYSTEM = """You are the planner inside Take Two, a revision tool for video editors.
 A client sent a voice note about a cut. Turn every change they ask for into exactly one tool call.
 Rules:
 - Ground each change to the cut's timeline in seconds (t0, t1), using the shot list and the timecoded keyframes. Prefer whole-shot ranges when the client refers to a shot; tighten to the frames where the subject is actually visible when the note says "when ...".
 - target_concept is a short noun phrase a segmentation model can find in the frame (e.g. "phone", "man in sunglasses", "man"). One object per call.
-- Only the three ops exist: blur (redact an object), title_behind (text placed behind a person), spotlight (make a subject pop; the background is pulled down). If a request fits none, or is ambiguous between two objects, call ask_client instead of guessing.
+- The ops that exist: blur (redact an object), title_behind (text placed behind a person), spotlight (make a subject pop; the background is pulled down), remove (erase a person or object from every frame and rebuild what was behind it, with its shadow), sky (replace the sky with a new look such as golden hour), recolour (change the colour of one object, e.g. clothing). If a request fits none, or is ambiguous between two objects, call ask_client instead of guessing.
+- For remove, name what must go with the object in `also` when it casts a shadow or reflection (e.g. "his shadow").
 - Quote the client's exact words in `quote`. Keep `rationale` to one short sentence.
 - Do not invent requests the client did not make. Praise and greetings are not requests."""
 
@@ -47,6 +48,22 @@ TOOLS = [
             "target_concept": {"type": "string"}, "t0": {"type": "number"}, "t1": {"type": "number"},
             "amount": {"type": "number", "description": "0..1"}, "quote": {"type": "string"}, "rationale": {"type": "string"}},
             "required": ["target_concept", "t0", "t1", "quote", "rationale"]}}},
+    {"type": "function", "function": {"name": "propose_remove", "description": "Erase one person or object from every frame of a range; the background behind it is rebuilt by video inpainting.",
+        "parameters": {"type": "object", "properties": {
+            "target_concept": {"type": "string"}, "also": {"type": "string", "description": "interaction regions removed with it, e.g. 'his shadow'"},
+            "t0": {"type": "number"}, "t1": {"type": "number"}, "quote": {"type": "string"}, "rationale": {"type": "string"}},
+            "required": ["target_concept", "t0", "t1", "quote", "rationale"]}}},
+    {"type": "function", "function": {"name": "propose_sky", "description": "Replace the sky over a range with a new look; the land is regraded to match.",
+        "parameters": {"type": "object", "properties": {
+            "look": {"type": "string", "description": "e.g. 'golden hour', 'overcast', 'night'"}, "t0": {"type": "number"}, "t1": {"type": "number"},
+            "quote": {"type": "string"}, "rationale": {"type": "string"}},
+            "required": ["look", "t0", "t1", "quote", "rationale"]}}},
+    {"type": "function", "function": {"name": "propose_recolour", "description": "Change the colour of one tracked object (keeps its shading and folds).",
+        "parameters": {"type": "object", "properties": {
+            "target_concept": {"type": "string"}, "colour": {"type": "string", "description": "the colour the client named"},
+            "hex": {"type": "string", "description": "#RRGGBB for that colour"}, "t0": {"type": "number"}, "t1": {"type": "number"},
+            "quote": {"type": "string"}, "rationale": {"type": "string"}},
+            "required": ["target_concept", "colour", "t0", "t1", "quote", "rationale"]}}},
     {"type": "function", "function": {"name": "ask_client", "description": "Ask one short clarifying question with options when a request is ambiguous.",
         "parameters": {"type": "object", "properties": {
             "question": {"type": "string"}, "options": {"type": "array", "items": {"type": "string"}}, "quote": {"type": "string"}},
@@ -108,6 +125,12 @@ def plan(transcript: list[dict], shots: list[Shot], video: Path, *, base_url: st
             body_ = TitleBehind(target=tgt, text=a["text"], style=a.get("style", "bold"))
         elif name == "propose_spotlight":
             body_ = Spotlight(target=tgt, amount=float(a.get("amount", 0.7)))
+        elif name == "propose_remove":
+            body_ = Remove(target=tgt, also=a.get("also"), engine="VOID video inpainting")
+        elif name == "propose_sky":
+            body_ = SkyReplace(look=a.get("look", "golden hour"))
+        elif name == "propose_recolour":
+            body_ = Recolour(target=tgt, colour=a.get("colour", ""), hex=a.get("hex"))
         elif name == "ask_client":
             body_ = Ask(question=a["question"], options=a.get("options", []))
         else:

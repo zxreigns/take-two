@@ -5,9 +5,9 @@ const mmss = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).
 const BARS = 64;
 
 /** The client's voice note: waveform, transcript that follows the audio, and each line tied to the edit it asked for. */
-export function VoiceNote({ url, client, lines, notes, ops, onHeard, onPick }: {
+export function VoiceNote({ url, client, lines, notes, ops, onHeard, onPick, onPlaying }: {
   url: string; client: string; lines: Line[]; notes: Note[]; ops: Op[];
-  onHeard: (opId: string | null) => void; onPick: (o: Op) => void;
+  onHeard: (opId: string | null) => void; onPick: (o: Op) => void; onPlaying?: (on: boolean) => void;
 }) {
   const audio = useRef<HTMLAudioElement>(null);
   const [t, setT] = useState(0);
@@ -52,6 +52,7 @@ export function VoiceNote({ url, client, lines, notes, ops, onHeard, onPick }: {
     return null;
   }), [lines, notes, ops]);
 
+  useEffect(() => { onPlaying?.(on); }, [on, onPlaying]);
   const cur = lines.findIndex((l) => t >= l.t0 && t < l.t1 + 0.3);
   const heard = on && cur >= 0 ? lineOp[cur] : null;
   useEffect(() => { onHeard(heard?.id ?? null); }, [heard?.id, onHeard]);

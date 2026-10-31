@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { fmtf, KIND, liveApi, media, opTitle, type LiveState, type Op, type Stage } from "./api";
+import { fmtf, KIND, liveApi, media, opTitle, replayAt, replayClock, replayLength, type LiveState, type Op, type Stage } from "./api";
+import { ModelRail, type RailKey, type RailState } from "./ModelRail";
 
 const mmss = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 const stageTime = (s: Stage, now: number) => (s.t0 ? ((s.t1 ?? now) - s.t0) : 0);
@@ -55,17 +56,29 @@ export function NewProject({ onStarted, onClose }: { onStarted: (id: string) => 
 }
 
 /** The progress view: every stage streams in, masks paint in live, then it hands over to the editor. */
-export function LiveRun({ pid, onDone, onReplay }: { pid: string; onDone: () => void; onReplay: () => void }) {
-  const [s, setS] = useState<LiveState | null>(null);
-  const [now, setNow] = useState(Date.now() / 1000);
+export function LiveRun({ pid, onDone, onReplay, replay }: { pid: string; onDone: () => void; onReplay: () => void; replay?: LiveState | null }) {
+  const [live, setLive] = useState<LiveState | null>(null);
+  const [wall, setWall] = useState(Date.now() / 1000);
+  const [tau, setTau] = useState(0);          // replay: display seconds since the replay started
   const [gen, setGen] = useState(0);
   const doneRef = useRef(false);
 
-  useEffect(() => liveApi.watch(pid, setS), [pid, gen]);
-  useEffect(() => { const t = setInterval(() => setNow(Date.now() / 1000), 200); return () => clearInterval(t); }, []);
+  useEffect(() => (replay ? undefined : liveApi.watch(pid, setLive)), [pid, gen, replay]);
   useEffect(() => {
-    if (s?.state === "done" && !doneRef.current) { doneRef.current = true; setTimeout(onDone, 2200); }
-  }, [s?.state, onDone]);
+    if (replay) {
+      const t0 = performance.now(); let raf = 0;
+      const tick = () => { const x = (performance.now() - t0) / 1000; setTau(x); if (x < replayLength(replay) + 0.1) raf = requestAnimationFrame(tick); };
+      raf = requestAnimationFrame(tick);
+      return () => cancelAnimationFrame(raf);
+    }
+    const t = setInterval(() => setWall(Date.now() / 1000), 200); return () => clearInterval(t);
+  }, [replay]);
+  const T = replay ? replayClock(replay, tau) : 0;
+  const s = replay ? replayAt(replay, T) : live;
+  const now = replay ? T : wall;
+  useEffect(() => {
+    if (s?.state === "done" && !doneRef.current) { doneRef.current = true; setTimeout(onDone, replay ? 3200 : 2200); }
+  }, [s?.state, onDone, replay]);
 
   const elapsed = s ? ((s.finished ?? now) - s.started) : 0;
   const cur = s?.stages.find((x) => x.status === "running") ?? s?.stages.find((x) => x.status === "error");
@@ -92,10 +105,26 @@ export function LiveRun({ pid, onDone, onReplay }: { pid: string; onDone: () => 
 
   if (!s) return <section className="viewcell"><div className="viewer"><div className="empty"><b>Connecting…</b></div></div></section>;
   const phase = s.state === "error" ? "error" : s.state === "done" ? "done" : cur?.key ?? "ingest";
+  const RK: Record<string, RailKey> = { transcribe: "listen", plan: "plan", masks: "track", render: "rebuild" };
+  const rail = { listen: "wait", plan: "wait", track: "wait", rebuild: "wait" } as Record<RailKey, RailState>;
+  const railSub: Partial<Record<RailKey, string>> = {};
+  for (const x of s.stages) {
+    const k = RK[x.key]; if (!k) continue;
+    rail[k] = x.status === "done" || x.status === "skipped" ? "done" : x.status === "running" ? "run" : "wait";
+    if (x.status === "done") railSub[k] = `${stageTime(x, now).toFixed(1)} s`;
+  }
+  const jobsDone = s.jobs.filter((j) => j.status === "done").length;
+  if (rail.listen === "run") railSub.listen = "transcribing the note";
+  if (rail.plan === "run") railSub.plan = `reading ${s.keyframes.length || s.shots.length} frames + the note`;
+  if (rail.track === "run") railSub.track = s.jobs.length ? `${jobsDone} of ${s.jobs.length} targets` : "starting";
+  if (rail.rebuild === "run") railSub.rebuild = `${Math.round(s.render * 100)}% rendered`;
+  const hasRemove = ((replay?.ops ?? ops) as Op[]).some((o) => o.body.kind === "remove");
+  const rebuild = hasRemove ? { model: "VOID", by: "open weights" } : { model: "Compositor", by: "Take Two" };
   const doneN = s.stages.filter((x) => x.status === "done" || x.status === "skipped").length;
 
   return (
     <>
+      <div className="railcell"><ModelRail state={rail} sub={railSub} rebuild={rebuild} replay={!!replay} /></div>
       <section className="viewcell">
         <div className="viewer monitor">
           {(phase === "ingest" || phase === "transcribe" || phase === "plan") && (
@@ -114,7 +143,7 @@ export function LiveRun({ pid, onDone, onReplay }: { pid: string; onDone: () => 
               {phase === "render" && <div className="renderbar"><span>Rendering the second take · {s.stages.find((x) => x.key === "render")?.msg}</span><div><b style={{ width: `${s.render * 100}%` }} /></div></div>}
             </div>
           )}
-          {phase === "done" && <div className="endcard"><small>Revision done in</small><strong className="disp">{mmss(elapsed)}</strong><span>Opening the editor…</span></div>}
+          {phase === "done" && <div className="endcard"><small>Revision done in</small><strong className="disp">{mmss(elapsed)}</strong><span>{replay ? "Recorded run · compute time, queue waits not shown" : "Opening the editor…"}</span></div>}
           {phase === "error" && s.error && (
             <div className="errcard tile">
               <small>Stopped at · {s.stages.find((x) => x.key === s.error!.stage)?.label}</small>
@@ -126,7 +155,7 @@ export function LiveRun({ pid, onDone, onReplay }: { pid: string; onDone: () => 
               {s.error.detail && <details><summary>Details</summary><pre>{s.error.detail}</pre></details>}
             </div>
           )}
-          <div className="timer"><i />{mmss(elapsed)}</div>
+          <div className={`timer ${replay ? "rp" : ""}`}><i />{replay ? "Replay · " : ""}{mmss(elapsed)}</div>
         </div>
       </section>
 

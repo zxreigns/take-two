@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, CLIENT, fmtf, KIND, media, opTitle, type ExportState, type Op, type Project } from "./api";
 import { LiveRun, NewProject } from "./Live";
 import { VoiceNote } from "./VoiceNote";
+import { ModelRail, type RailKey, type RailState } from "./ModelRail";
 
 type View = "compare" | "before" | "after" | "masks";
 const VIEWS: { k: View; label: string }[] = [
@@ -54,6 +55,8 @@ export default function App() {
   const [pid, setPid] = useState(() => new URLSearchParams(location.search).get("project") ?? HOME);
   const [showNew, setShowNew] = useState(false);
   const [running, setRunning] = useState(false);
+  const [replaying, setReplaying] = useState(() => new URLSearchParams(location.search).get("run") === "replay");
+  const [voiceOn, setVoiceOn] = useState(false);
 
   const open = useCallback((id: string) => {
     if (id !== (new URLSearchParams(location.search).get("project") ?? HOME)) history.pushState(null, "", id === HOME ? location.pathname : `?project=${id}`);
@@ -178,7 +181,27 @@ export default function App() {
   }, [duration]);
 
   const activeId = liveOp?.id ?? selected;
-  useEffect(() => { activeCard.current?.scrollIntoView({ block: "nearest", behavior: "smooth" }); }, [activeId]);
+
+  /** The editor's model rail: the voice note lights Whisper, a line tied to an edit lights the planner,
+   *  playback inside an edit lights SAM 3.1 (the track) and the model that rebuilt the shot. */
+  const heardOp = ops.find((o) => o.id === heard);
+  const showOp = heardOp ?? (playing || view === "masks" ? liveOp : undefined);
+  const rail = { listen: "done", plan: "done", track: "done", rebuild: "done" } as Record<RailKey, RailState>;
+  const railSub: Partial<Record<RailKey, string>> = {
+    listen: `${project?.transcript?.length ?? 0} lines`,
+    plan: `${ops.length} edits${project?.planner?.seconds ? ` · ${project.planner.seconds.toFixed(0)} s` : ""}`,
+    track: `${ops.length} targets tracked`,
+    rebuild: `${ops.length} shots rebuilt`,
+  };
+  if (voiceOn) { rail.listen = "run"; railSub.listen = "hearing the note"; }
+  if (heardOp) { rail.plan = "run"; railSub.plan = `→ ${opTitle(heardOp)}`; }
+  if (showOp && !voiceOn) {
+    rail.track = "run"; railSub.track = `“${showOp.body.target?.concept ?? ""}”${showOp.frames ? ` · ${showOp.frames} frames` : ""}`;
+    if (view !== "masks") { rail.rebuild = "run"; railSub.rebuild = KIND[showOp.body.kind].done.toLowerCase(); }
+  }
+  const rebuildModel = showOp && showOp.body.kind !== "remove" ? { model: "Compositor", by: "Take Two" }
+    : ops.some((o) => o.body.kind === "remove") ? { model: "VOID", by: "open weights" } : { model: "Compositor", by: "Take Two" };
+  useEffect(() => { if (window.innerWidth > 860) activeCard.current?.scrollIntoView({ block: "nearest", behavior: "smooth" }); }, [activeId]);
 
   /** Voice note -> plan -> reveal: when the client starts talking about an edit, the viewer jumps to that shot and wipes it in. */
   const onHeard = useCallback((id: string | null) => {
@@ -218,15 +241,16 @@ export default function App() {
             </div>
           )}
         </div>
-        {!running && (
+        {!running && !replaying && (
           <div className="seg">
             {VIEWS.map((v) => <button key={v.k} className={view === v.k ? "on" : ""} onClick={() => setView(v.k)}>{v.label}</button>)}
           </div>
         )}
         <div className="top-r">
           <span className={`state ${offline ? "bad" : ""}`}><i />{status}</span>
+          {project?.run && !running && !replaying && <button className="pill ghost runbtn" onClick={() => { setPlaying(false); [before.current, after.current, mattes.current].forEach((v) => v?.pause()); setReplaying(true); }}><i />Watch the run</button>}
           <button className="pill ghost" onClick={() => setShowNew(true)}>New revision</button>
-          {!running && (
+          {!running && !replaying && (
             <div className="exp-wrap">
               <button className="pill blk" disabled={!approved} onClick={() => (exp.state === "idle" ? startExport() : setExpOpen(!expOpen))}>
                 {exp.state === "running" ? <><span className="spin" />Rendering</> : `Export ${approved || ""} approved`.replace("  ", " ")}<span className="arrow">↓</span>
@@ -248,10 +272,12 @@ export default function App() {
       </header>
       {showNew && <NewProject onClose={() => setShowNew(false)} onStarted={(id) => { setShowNew(false); setRunning(true); setProject(null); open(id); }} />}
 
-      {running ? (
-        <LiveRun key={pid} pid={pid} onDone={finished} onReplay={() => { setRunning(false); open(HOME); }} />
+      {running || (replaying && project?.run) ? (
+        <LiveRun key={pid + (replaying ? ":replay" : "")} pid={pid} replay={replaying ? project?.run : null}
+          onDone={replaying ? () => setReplaying(false) : finished} onReplay={() => { setRunning(false); open(HOME); }} />
       ) : (
         <>
+          <div className="railcell"><ModelRail state={rail} sub={railSub} rebuild={rebuildModel} /></div>
           <section className="viewcell">
             <div className={`viewer ${view}`} ref={stage} onPointerMove={onPointer} onPointerUp={() => (dragging.current = false)} onPointerLeave={() => (dragging.current = false)}>
               {m ? (
@@ -299,7 +325,7 @@ export default function App() {
           <aside className="side">
             {m?.voice_url && (
               <VoiceNote url={media(m.voice_url)!} client={client} lines={project?.transcript ?? []} notes={project?.notes ?? []} ops={ops}
-                onHeard={onHeard} onPick={pick} />
+                onHeard={onHeard} onPick={pick} onPlaying={setVoiceOn} />
             )}
             <div className="sh"><h2 className="disp">{ops.length} edit{ops.length === 1 ? "" : "s"} from {client}</h2><span className="n">{decided ? `${approved} of ${ops.length} approved` : "Review each one"}</span></div>
             <div className="cards">
@@ -337,7 +363,7 @@ export default function App() {
         </>
       )}
 
-      <footer className="tl tile" style={running ? { display: "none" } : undefined}>
+      <footer className="tl tile" style={running || (replaying && project?.run) ? { display: "none" } : undefined}>
         <div className="tlh">
           <button className={`play ${playing ? "on" : ""}`} onClick={toggle} aria-label={playing ? "Pause" : "Play"} />
           <span className="tcn">{fmtf(time)} <span>/ {fmtf(duration)}</span></span>

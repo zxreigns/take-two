@@ -15,8 +15,8 @@ export type Media = {
 };
 export type Project = {
   id: string; name: string; notes: Note[]; ops: Op[]; media: null | Media;
-  transcript?: Line[] | null; planner?: { model?: string; seconds?: number; baked?: boolean }; replay?: boolean; client?: string;
-  live?: LiveState | null;
+  transcript?: Line[] | null; planner?: { model?: string; seconds?: number; baked?: boolean; masks?: string }; replay?: boolean; client?: string;
+  live?: LiveState | null; run?: LiveState | null;
 };
 export type ExportState = { state: "idle" | "running" | "done" | "error"; url?: string; error?: string; ops?: string[] };
 
@@ -57,15 +57,15 @@ export const fmt = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s %
 export const fmtf = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toFixed(1).padStart(4, "0")}`;
 
 /** Colour carries meaning and nothing else: the client is blue, each kind of edit has its own hue. */
-export const CLIENT = "#2F6BFF";
+export const CLIENT = "#60A5FA";
 export const KIND: Record<OpKind, { label: string; colour: string; done: string }> = {
-  remove: { label: "Remove", colour: "#7C3AED", done: "Removed" },
-  sky: { label: "Sky", colour: "#F59E0B", done: "Sky replaced" },
-  recolour: { label: "Recolour", colour: "#E5487A", done: "Recoloured" },
-  blur: { label: "Blur", colour: "#0EA5A4", done: "Blurred" },
-  title_behind: { label: "Title behind", colour: "#FF6A1A", done: "Title added" },
-  spotlight: { label: "Make pop", colour: "#12B76A", done: "Popped" },
-  ask: { label: "Question", colour: "#8A8A83", done: "Asked" },
+  remove: { label: "Remove", colour: "#A78BFA", done: "Removed" },
+  sky: { label: "Sky", colour: "#FBBF24", done: "Sky replaced" },
+  recolour: { label: "Recolour", colour: "#F472B6", done: "Recoloured" },
+  blur: { label: "Blur", colour: "#2DD4BF", done: "Blurred" },
+  title_behind: { label: "Title behind", colour: "#FB923C", done: "Title added" },
+  spotlight: { label: "Make pop", colour: "#34D399", done: "Popped" },
+  ask: { label: "Question", colour: "#9CA3AF", done: "Asked" },
 };
 
 /** The edit in a few words, the way an editor would write it on a card. */
@@ -117,3 +117,42 @@ export const liveApi = {
     return () => { closed = true; es.close(); if (poll) clearInterval(poll); };
   },
 };
+
+// ---------- replay of a recorded run ----------
+/** Display seconds per stage when a recorded run is replayed (the clock still shows the recorded seconds). */
+const REPLAY_SPAN: Record<string, number> = { ingest: 1.0, transcribe: 2.6, plan: 3.8, masks: 6.5, render: 5.5 };
+export const replayLength = (run: LiveState) => run.stages.reduce((a, s) => a + (REPLAY_SPAN[s.key] ?? 2), 0);
+
+/** The recorded time a replay shows `tau` display seconds in. Each stage is squeezed into its display span. */
+export function replayClock(run: LiveState, tau: number): number {
+  let acc = 0;
+  for (const s of run.stages) {
+    const d = REPLAY_SPAN[s.key] ?? 2;
+    if (tau < acc + d) return (s.t0 ?? 0) + ((tau - acc) / d) * ((s.t1 ?? 0) - (s.t0 ?? 0));
+    acc += d;
+  }
+  return run.finished ?? 0;
+}
+
+/** The live state a recorded run was in at recorded second T. */
+export function replayAt(run: LiveState, T: number): LiveState {
+  const stages = run.stages.map((s) => {
+    const t0 = s.t0 ?? 0, t1 = s.t1 ?? 0;
+    if (T >= t1) return { ...s };
+    if (T >= t0) return { ...s, status: "running" as const, t1: null, msg: s.key === "render" ? s.msg : "" };
+    return { ...s, status: "pending" as const, t0: null, t1: null, msg: "" };
+  });
+  const done = (k: string) => stages.find((s) => s.key === k)?.status === "done";
+  const started = (k: string) => stages.find((s) => s.key === k)?.status !== "pending";
+  const r = run.stages.find((s) => s.key === "render")!;
+  type Rec = SamJob & { t_done?: number };
+  type RecPaint = Paint & { at?: number };
+  return {
+    ...run, state: T >= (run.finished ?? 0) ? "done" : "running", finished: T >= (run.finished ?? 0) ? run.finished : null, stages,
+    transcript: done("transcribe") ? run.transcript : null,
+    ops: done("plan") ? run.ops : [],
+    jobs: started("masks") ? (run.jobs as Rec[]).map((j) => ({ ...j, status: (j.t_done ?? 0) <= T ? "done" : "tracking" })) : [],
+    paint: (run.paint as RecPaint[]).filter((p) => (p.at ?? 0) <= T),
+    render: Math.max(0, Math.min(1, (T - (r.t0 ?? 0)) / Math.max(1e-3, (r.t1 ?? 1) - (r.t0 ?? 0)))),
+  };
+}
