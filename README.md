@@ -7,6 +7,14 @@ Take Two listens, finds each moment, tracks the right object frame by frame, and
 
 Built for the Meta Global AI Developer Hackathon (Indie track · Build for Your World).
 
+![Take Two: the client's voice note becomes a plan from Muse Spark](docs/img/signal_1_voice_to_plan.jpg)
+
+| The edit, wiped against the original | SAM 3.1 tracking each target, live | At 360 px on a phone |
+|---|---|---|
+| ![Sky to golden hour, wipe player](docs/img/signal_2_wipe_golden_hour.jpg) | ![SAM 3.1 masks painting in during the run](docs/img/signal_3_sam_tracking_replay.jpg) | <img src="docs/img/signal_4_phone_360.jpg" alt="The editor at phone width" width="220"> |
+
+The showcase: one client voice note asks for three fixes. Muse Spark Open plans them against the cut's own timeline (and adds "his shadow" to the removal on its own), SAM 3.1 tracks every target on every frame, and Take Two renders each as a proposed edit: a man walking through a plaza removed with his shadow, a flat sky turned golden hour, a red dress recoloured to royal blue while the red roses stay red. Nobody draws a mask. The plan Muse Spark Open returned is in [`docs/showcase/`](docs/showcase/).
+
 ## How it works
 ```
 the cut + the client's voice note (uploaded in the editor)
@@ -50,7 +58,7 @@ Everything in this repository was written during the event window. The first com
 - [x] FCP7 XML export: V1 the client cut, V2 the approved edits cut to their spans, sequence markers carrying the client's words (`GET /projects/{id}/export.xml`)
 - [x] Editor redesign ("Daylight"): white tiles on warm grey, Inter Tight + Inter, colour only for meaning (client blue, one hue per kind of edit). Play the client's voice note and the editor follows it: each line lights up the edit it asked for, the player jumps to that shot and wipes the edit in
 - [x] Editor redesign v2 ("Signal", Oct 31): dark glass + neon, Geist and Geist Mono. A model rail across the top lights up the model working on each step (Listen · Whisper, Plan · Muse Spark, Track · SAM 3.1, Rebuild · VOID or the compositor), in the live progress view and in the editor (the voice note lights the planner; playback inside an edit lights SAM 3.1 and the model that rebuilt the shot). Designed down to a 360 px phone
-- [x] Planner tools `propose_remove`, `propose_sky`, `propose_recolour`. Muse Spark Open now plans the showcase from the voice note itself: 3 edits on the right shots, "his shadow" included, in 41.6 s (`dev/run_planner_wow.py`)
+- [x] Planner tools `propose_remove`, `propose_sky`, `propose_recolour`. Muse Spark Open now plans the showcase from the voice note itself: 3 edits on the right shots, "his shadow" included, in 41.6 s (`dev/run_planner_wow.py`, output in `docs/showcase/`)
 - [x] "Watch the run": the showcase's recorded run (real compute times; fal queue waits not shown) replays through the same live progress view, sped up and labelled as a replay
 - [x] Showcase project: three edits that normally take hours of roto: remove a man walking through a plaza (and his shadow) with SAM 3.1 masks + VOID video inpainting; a flat sky to golden hour on a SAM 3.1 sky matte; a red dress to royal blue with the roses untouched. New op kinds `remove`, `sky`, `recolour`; export joins the approved edited shots
 
@@ -68,10 +76,11 @@ cd frontend && npm install && npm run dev
 
 Live route: open the editor, press **+ New revision**, drop the cut (up to 60 s) and the voice note, press **Run Take Two**.
 
-Showcase project (opens by default; built from the rendered shots, their SAM 3.1 answers and the client's voice note):
+Showcase project (opens by default; built from the rendered shots, their SAM 3.1 answers and the client's voice note). The media is too big for git, so it ships as a release asset: download [`showcase_media.zip`](https://github.com/zxreigns/take-two/releases/download/showcase-v1/showcase_media.zip) (about 28 MB) and unzip it next to the repo.
 ```bash
-cd backend && python -m app.wow --wow <folder with removal_v2/ sky/ recolour/ masks/ voice/>
-python -m app.wow --wow <same folder> --run      # planner cards + the recorded run ("Watch the run", or /?run=replay)
+unzip showcase_media.zip -d showcase_media     # removal_v2/ sky/ recolour/ masks/ voice/ planner_ops_wow.json
+cd backend && python -m app.wow --wow ../showcase_media
+python -m app.wow --wow ../showcase_media --run      # planner cards + the recorded run ("Watch the run", or /?run=replay)
 # http://localhost:5173/   ·   the Lagos replay below opens at /?project=demo
 ```
 

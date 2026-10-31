@@ -1,0 +1,64 @@
+{
+ "id": "chatcmpl-1ac325dfcae145b4a64c03395685da20",
+ "object": "chat.completion",
+ "created": 1793452794,
+ "model": "accounts/fireworks/models/muse-spark-open",
+ "choices": [
+  {
+   "index": 0,
+   "message": {
+    "role": "assistant",
+    "content": "Got your three notes \u2014 I'll line up the fixes for each shot.",
+    "reasoning_content": "We need to parse client voice note:\n\n- Three quick things, on the plaza shot, there's a guy walking right through the middle. Can you get rid of him? -> remove guy in plaza shot. That's shot 1: 0.00-5.16s. The guy walking is the main subject? In keyframes t=0.5-4.5 we see a man in black with headphones walking. That's the guy to remove. Need propose_remove with target_concept \"man\" or \"man in black\" etc. Also his shadow. t0=0.00 t1=5.16. Quote: \"there's a guy walking right through the middle. Can you get rid of him?\" Rationale: remove distracting passerby from plaza.\n\n- Then the one on the path, the sky looks a bit dead. Make it golden hour. -> shot 2: 5.16-11.16s. propose_sky look=\"golden hour\" t0=5.16 t1=11.16 quote \"the sky looks a bit dead. Make it golden hour.\"\n\n- And the last shot, her dress needs to be royal blue. That's the brand color. -> shot 3: 11.16-17.16s. propose_recolour target_concept \"dress\" colour \"royal blue\" hex #4169E1 (royal blue). t0=11.16 t1=17.16 quote \"her dress needs to be royal blue.\"\n\nWe must call one tool per requested change, in order client asked.\n\nWe need to ensure target_concept is short noun phrase segmentation model can find. For remove: \"man\" or \"man in black\" . Use \"man\". Also need also \"his shadow\". Provide.\n\nFor sky: look golden hour.\n\nFor recolour: target_concept \"dress\" colour royal blue hex #4169E1.\n\nWe need to provide quote exact words. Use client's exact words. Provide rationale one short sentence.\n\nWe must ground each change to timeline in seconds (t0,t1), using shot list and timecoded keyframes. Prefer whole-shot ranges when client refers to a shot; tighten to frames where subject is actually visible when note says \"when ...\". Here client refers to plaza shot -> whole shot 1. Path shot -> whole shot 2. Last shot -> whole shot 3.\n\nWe need to output three tool calls.\n\nWe must ensure we use correct function names: propose_remove, propose_sky, propose_recolour.\n\nWe need to include required fields.\n\nFor propose_remove: target_concept, also, t0, t1, quote, rationale.\n\nFor propose_sky: look, t0, t1, quote, rationale.\n\nFor propose_recolour: target_concept, colour, hex, t0, t1, quote, rationale.\n\nWe should ensure hex is correct for royal blue: #4169E1 is standard. Could also be #002366 but #4169E1 is more common. Use #4169E1.\n\nWe need to ensure we quote client's exact words. Let's capture exact transcript snippets:\n\n- \"there's a guy walking right through the middle. Can you get rid of him?\"\n- \"the sky looks a bit dead. Make it golden hour.\"\n- \"her dress needs to be royal blue.\"\n\nWe should include those.\n\nWe need to do parallel tool calls, each as its own message.\n\nWe must not invent requests.\n\nWe should provide rationale short sentence.\n\nWe need to ensure t0/t1 are numbers.\n\nLet's produce calls.\n\nPotential nuance: For remove, target_concept should be \"man\" . Could be \"man in black\" . Use \"man\". Provide also \"his shadow\".\n\nCheck spec: For remove, name what must go with the object in also when it casts a shadow or reflection (e.g. \"his shadow\"). So also = \"his shadow\".\n\nWe should ensure we follow order: plaza, path, last shot.\n\nWe need to output in final channel.\n\nWe should also consider commentary? Not needed but could add.\n\nWe must ensure we don't call ask_client.\n\nWe need to ensure we use correct JSON formatting.\n\nWe should produce three consecutive tool calls.\n\n",
+    "tool_calls": [
+     {
+      "index": 0,
+      "id": "chatcmpl-tool-912aaa1068245e17",
+      "type": "function",
+      "function": {
+       "name": "propose_remove",
+       "arguments": "{\"target_concept\": \"man\", \"also\": \"his shadow\", \"t0\": 0.0, \"t1\": 5.16, \"quote\": \"there's a guy walking right through the middle. Can you get rid of him?\", \"rationale\": \"Remove distracting passerby from plaza shot.\"}"
+      },
+      "name": null
+     },
+     {
+      "index": 1,
+      "id": "chatcmpl-tool-a74a4313b533e5f1",
+      "type": "function",
+      "function": {
+       "name": "propose_sky",
+       "arguments": "{\"look\": \"golden hour\", \"t0\": 5.16, \"t1\": 11.16, \"quote\": \"the sky looks a bit dead. Make it golden hour.\", \"rationale\": \"Replace flat sky with warm golden hour look.\"}"
+      },
+      "name": null
+     },
+     {
+      "index": 2,
+      "id": "chatcmpl-tool-b0eda88d3b98cbef",
+      "type": "function",
+      "function": {
+       "name": "propose_recolour",
+       "arguments": "{\"target_concept\": \"dress\", \"colour\": \"royal blue\", \"hex\": \"#4169E1\", \"t0\": 11.16, \"t1\": 17.16, \"quote\": \"her dress needs to be royal blue.\", \"rationale\": \"Change dress to brand color royal blue.\"}"
+      },
+      "name": null
+     }
+    ],
+    "tools": null
+   },
+   "finish_reason": "tool_calls"
+  }
+ ],
+ "usage": {
+  "prompt_tokens": 4738,
+  "total_tokens": 6073,
+  "completion_tokens": 1335,
+  "prompt_tokens_details": {
+   "cached_tokens": 0
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 866
+  },
+  "output_tokens_details": {
+   "reasoning_tokens": 866
+  }
+ }
+}

@@ -1,0 +1,139 @@
+{
+ "model": "muse-spark-open",
+ "seconds": 41.6,
+ "transcribe_seconds": 13.3,
+ "transcript": [
+  {
+   "t0": 0.0,
+   "t1": 3.68,
+   "text": "Hey, just watch the cut, it's so close."
+  },
+  {
+   "t0": 3.68,
+   "t1": 6.64,
+   "text": "Three quick things, on the plaza shot,"
+  },
+  {
+   "t0": 6.64,
+   "t1": 9.08,
+   "text": "there's a guy walking right through the middle."
+  },
+  {
+   "t0": 9.08,
+   "t1": 10.8,
+   "text": "Can you get rid of him?"
+  },
+  {
+   "t0": 10.8,
+   "t1": 14.48,
+   "text": "Then the one on the path, the sky looks a bit dead."
+  },
+  {
+   "t0": 14.48,
+   "t1": 16.24,
+   "text": "Make it golden hour."
+  },
+  {
+   "t0": 16.24,
+   "t1": 20.2,
+   "text": "And the last shot, her dress needs to be royal blue."
+  },
+  {
+   "t0": 20.2,
+   "t1": 22.12,
+   "text": "That's the brand color."
+  },
+  {
+   "t0": 22.12,
+   "t1": 22.96,
+   "text": "Thanks."
+  }
+ ],
+ "usage": {
+  "prompt_tokens": 4738,
+  "total_tokens": 6073,
+  "completion_tokens": 1335,
+  "prompt_tokens_details": {
+   "cached_tokens": 0
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 866
+  },
+  "output_tokens_details": {
+   "reasoning_tokens": 866
+  }
+ },
+ "ops": [
+  {
+   "id": "0f602e46fe",
+   "note_id": "ff87d91a32",
+   "t0": 0.0,
+   "t1": 5.16,
+   "body": {
+    "kind": "remove",
+    "target": {
+     "concept": "man",
+     "object_id": null
+    },
+    "also": "his shadow",
+    "engine": "VOID video inpainting"
+   },
+   "status": "proposed",
+   "rationale": "Remove distracting passerby from plaza shot."
+  },
+  {
+   "id": "eca449e479",
+   "note_id": "de0506b75f",
+   "t0": 5.16,
+   "t1": 11.16,
+   "body": {
+    "kind": "sky",
+    "target": {
+     "concept": "sky",
+     "object_id": null
+    },
+    "look": "golden hour"
+   },
+   "status": "proposed",
+   "rationale": "Replace flat sky with warm golden hour look."
+  },
+  {
+   "id": "e6a6dd0220",
+   "note_id": "1d84fc90a9",
+   "t0": 11.16,
+   "t1": 17.16,
+   "body": {
+    "kind": "recolour",
+    "target": {
+     "concept": "dress",
+     "object_id": null
+    },
+    "colour": "royal blue",
+    "hex": "#4169E1"
+   },
+   "status": "proposed",
+   "rationale": "Change dress to brand color royal blue."
+  }
+ ],
+ "notes": [
+  {
+   "id": "ff87d91a32",
+   "t": 0.0,
+   "text": "there's a guy walking right through the middle. Can you get rid of him?",
+   "source": "voice"
+  },
+  {
+   "id": "de0506b75f",
+   "t": 5.16,
+   "text": "the sky looks a bit dead. Make it golden hour.",
+   "source": "voice"
+  },
+  {
+   "id": "1d84fc90a9",
+   "t": 11.16,
+   "text": "her dress needs to be royal blue.",
+   "source": "voice"
+  }
+ ],
+ "ran_at": "2026-10-31 13:20:32Z"
+}
